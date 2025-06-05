@@ -38,12 +38,30 @@ yolov8/
 首先安装必要的Python包：
 
 ```bash
-pip install ultralytics opencv-python pillow matplotlib pandas scikit-learn
+pip install ultralytics opencv-python pillow matplotlib pandas scikit-learn gradio psutil
 ```
 
 ## 快速开始
 
-### 1. 完整流程（推荐）
+### 1. Gradio Web界面（推荐）
+
+启动可视化Web界面，提供完整的训练、推理和监控功能：
+
+```bash
+python start_gradio.py
+```
+
+启动后访问：http://localhost:7860
+
+**Gradio界面功能**：
+- 📊 **数据管理**: 数据转换、数据集检查、样本预览
+- 🎯 **模型训练**: 普通训练、智能训练、恢复训练
+- 🔍 **模型推理**: 单图推理、批量推理、实时预览
+- 📈 **训练监控**: 实时日志、训练曲线、状态监控
+- ⚙️ **配置管理**: 参数配置、快速设置、配置导入导出
+- 🛠️ **工具集**: 数据分析、模型导出、环境检查
+
+### 2. 完整流程（命令行）
 
 运行完整的数据转换、训练和推理流程：
 
