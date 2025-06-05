@@ -158,7 +158,7 @@ def main():
     try:
         app = create_simple_interface()
         app.launch(
-            server_name="127.0.0.1",
+            server_name="0.0.0.0",
             server_port=7860,
             share=False,
             debug=False,

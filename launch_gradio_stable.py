@@ -21,7 +21,7 @@ def check_port_available(port=7860):
     import socket
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(('127.0.0.1', port))
+            s.bind(('0.0.0.0', port))
             return True
     except OSError:
         return False
@@ -45,7 +45,7 @@ def main():
         return
     
     print(f"🌐 使用端口: {port}")
-    print(f"🌐 界面地址: http://127.0.0.1:{port}")
+    print(f"🌐 界面地址: http://0.0.0.0:{port}")
     print("=" * 50)
     
     # 设置环境变量
@@ -72,7 +72,7 @@ def main():
         # 启动应用
         print("🚀 正在启动服务器...")
         app.launch(
-            server_name="127.0.0.1",
+            server_name="0.0.0.0",
             server_port=port,
             share=False,
             debug=False,

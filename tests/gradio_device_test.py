@@ -167,7 +167,7 @@ def main():
     try:
         app = create_device_test_interface()
         app.launch(
-            server_name="127.0.0.1",
+            server_name="0.0.0.0",
             server_port=7863,
             share=False,
             debug=False,

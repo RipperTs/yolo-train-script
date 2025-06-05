@@ -109,7 +109,7 @@ def main():
         print("✅ 界面创建成功")
         
         app.launch(
-            server_name="127.0.0.1",
+            server_name="0.0.0.0",
             server_port=7862,
             share=False,
             debug=False,
