@@ -38,3 +38,4 @@ labeling_data/
 datasets/
 logs/
 models/
+yolov8n.pt
