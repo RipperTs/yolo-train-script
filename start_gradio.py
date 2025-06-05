@@ -16,7 +16,7 @@ sys.path.insert(0, str(project_root))
 
 # 设置环境变量
 os.environ['GRADIO_ANALYTICS_ENABLED'] = 'False'
-os.environ['GRADIO_SERVER_NAME'] = '0.0.0.0'
+os.environ['GRADIO_SERVER_NAME'] = '127.0.0.1'
 os.environ['GRADIO_SERVER_PORT'] = '7860'
 
 def main():
