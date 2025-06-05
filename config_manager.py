@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from config import (
-    TRAINING_CONFIG, INFERENCE_CONFIG, AUGMENTATION_CONFIG, 
+    TRAINING_CONFIG, INFERENCE_CONFIG, AUGMENTATION_CONFIG,
     MODEL_CONFIG, CLASS_NAMES, TRAIN_RATIO, VAL_RATIO, TEST_RATIO
 )
+from device_manager import device_manager
 
 
 class ConfigManager:
@@ -85,6 +86,16 @@ class ConfigManager:
         for key, value in kwargs.items():
             if key in self.current_config["training"]:
                 self.current_config["training"][key] = value
+
+                # 如果更新了设备，同时更新设备管理器
+                if key == "device":
+                    device_manager.set_device(value)
+
+                    # 根据设备自动调整其他参数
+                    recommended = device_manager.get_optimal_batch_size(value)
+                    if "batch_size" not in kwargs:  # 如果没有手动设置批次大小
+                        self.current_config["training"]["batch_size"] = recommended
+
         self.save_config()
     
     def get_inference_config(self) -> Dict[str, Any]:
@@ -134,6 +145,40 @@ class ConfigManager:
     def get_dataset_config(self) -> Dict[str, Any]:
         """获取数据集配置"""
         return self.current_config["dataset"]
+
+    def get_device_info(self) -> Dict[str, Any]:
+        """获取设备信息"""
+        return {
+            "current_device": device_manager.current_device,
+            "available_devices": device_manager.get_device_choices(),
+            "device_descriptions": device_manager.get_device_descriptions(),
+            "gpu_available": device_manager.is_gpu_available(),
+            "device_status": device_manager.get_device_status()
+        }
+
+    def update_device(self, device_id: str) -> bool:
+        """更新设备设置"""
+        if device_manager.set_device(device_id):
+            self.current_config["training"]["device"] = device_id
+
+            # 自动调整相关参数
+            recommended_batch = device_manager.get_optimal_batch_size(device_id)
+            self.current_config["training"]["batch_size"] = recommended_batch
+
+            # 根据设备类型调整workers数量
+            if device_id == "cpu":
+                self.current_config["training"]["workers"] = 2
+            else:
+                self.current_config["training"]["workers"] = 4
+
+            self.save_config()
+            return True
+        return False
+
+    def get_device_recommendations(self, device_id: str) -> Dict[str, Any]:
+        """获取设备推荐配置"""
+        from device_manager import get_recommended_settings
+        return get_recommended_settings(device_id)
     
     def reset_to_default(self):
         """重置为默认配置"""

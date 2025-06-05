@@ -156,7 +156,7 @@ def demo_config_management():
         
         # 3. 导出配置
         print("3. 导出配置到文件...")
-        export_path = "demo_config.json"
+        export_path = "../demo_config.json"
         if config_manager.export_config(export_path):
             print(f"✅ 配置已导出到: {export_path}")
         else:

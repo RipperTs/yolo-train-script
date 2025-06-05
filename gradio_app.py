@@ -19,6 +19,7 @@ sys.path.append(str(Path(__file__).parent))
 
 from gradio_utils import log_monitor, training_monitor, dataset_manager, model_manager
 from config_manager import config_manager
+from device_manager import device_manager, get_device_choices_for_gradio, parse_device_choice
 from data_converter import DataConverter
 from trainer import YOLOv8Trainer
 from inference import YOLOv8Inference
@@ -110,7 +111,19 @@ class GradioApp:
                 batch_size = gr.Slider(1, 64, value=16, label="批次大小")
                 learning_rate = gr.Slider(0.0001, 0.1, value=0.01, label="学习率")
                 img_size = gr.Dropdown([320, 416, 512, 640, 832], value=640, label="图片尺寸")
-                device = gr.Dropdown(["auto", "cpu", "cuda"], value="cpu", label="训练设备")
+
+                # 智能设备选择
+                device_choices = get_device_choices_for_gradio()
+                device = gr.Dropdown(
+                    choices=device_choices,
+                    value=device_choices[0] if device_choices else "cpu",
+                    label="训练设备",
+                    info="选择训练使用的设备"
+                )
+
+                # 设备信息显示
+                device_info = gr.JSON(label="设备信息", visible=len(device_choices) > 1)
+                refresh_device_btn = gr.Button("🔄 刷新设备信息", size="sm")
                 
                 gr.Markdown("### 训练模式")
                 with gr.Row():
@@ -145,6 +158,10 @@ class GradioApp:
         )
         resume_train_btn.click(self._resume_training, outputs=training_status)
         stop_train_btn.click(self._stop_training, outputs=training_status)
+
+        # 设备相关事件
+        device.change(self._on_device_change, inputs=[device], outputs=[batch_size, device_info])
+        refresh_device_btn.click(self._refresh_device_info, outputs=device_info)
     
     def _create_inference_tab(self):
         """创建模型推理标签页"""
@@ -245,11 +262,23 @@ class GradioApp:
                     quick_epochs = gr.Slider(1, 1000, value=100, label="训练轮数")
                     quick_batch = gr.Slider(1, 64, value=16, label="批次大小")
                     quick_lr = gr.Slider(0.0001, 0.1, value=0.01, label="学习率")
-                
+
+                    # 设备配置
+                    device_choices = get_device_choices_for_gradio()
+                    quick_device = gr.Dropdown(
+                        choices=device_choices,
+                        value=device_choices[0] if device_choices else "cpu",
+                        label="训练设备"
+                    )
+
                 with gr.Accordion("推理配置", open=False):
                     quick_conf = gr.Slider(0.1, 1.0, value=0.25, label="置信度阈值")
                     quick_iou = gr.Slider(0.1, 1.0, value=0.45, label="IoU阈值")
-                
+
+                with gr.Accordion("设备信息", open=device_manager.is_gpu_available()):
+                    device_status_display = gr.JSON(label="设备状态")
+                    refresh_device_status_btn = gr.Button("🔄 刷新设备状态")
+
                 save_quick_config_btn = gr.Button("💾 保存快速配置", variant="primary")
                 config_status = gr.Textbox(label="配置状态", lines=3)
         
@@ -258,9 +287,11 @@ class GradioApp:
         reset_config_btn.click(self._reset_config, outputs=[config_display, config_status])
         save_quick_config_btn.click(
             self._save_quick_config,
-            inputs=[quick_epochs, quick_batch, quick_lr, quick_conf, quick_iou],
+            inputs=[quick_epochs, quick_batch, quick_lr, quick_device, quick_conf, quick_iou],
             outputs=config_status
         )
+        refresh_device_status_btn.click(self._refresh_device_info, outputs=device_status_display)
+        quick_device.change(self._on_quick_device_change, inputs=[quick_device], outputs=[quick_batch, device_status_display])
         
         # 初始化配置显示
         # refresh_config_btn.click(self._get_config_summary, outputs=config_display)
@@ -336,13 +367,16 @@ class GradioApp:
             return "⚠️ 训练正在进行中，请等待完成或停止当前训练"
 
         try:
+            # 解析设备选择
+            device_id = parse_device_choice(device)
+
             # 更新配置
             config_manager.update_training_config(
                 epochs=epochs,
                 batch_size=batch_size,
                 learning_rate=learning_rate,
                 img_size=img_size,
-                device=device
+                device=device_id
             )
 
             # 启动训练线程
@@ -483,6 +517,34 @@ class GradioApp:
         except Exception as e:
             return f"❌ 批量推理失败: {e}"
 
+    # 设备管理相关方法
+    def _on_device_change(self, device_choice):
+        """设备切换时的处理"""
+        try:
+            device_id = parse_device_choice(device_choice)
+
+            # 更新设备
+            if config_manager.update_device(device_id):
+                # 获取推荐的批次大小
+                recommended_batch = device_manager.get_optimal_batch_size(device_id)
+
+                # 获取设备信息
+                device_info = config_manager.get_device_info()
+
+                return recommended_batch, device_info
+            else:
+                return gr.update(), {"error": "设备切换失败"}
+
+        except Exception as e:
+            return gr.update(), {"error": f"设备切换出错: {e}"}
+
+    def _refresh_device_info(self):
+        """刷新设备信息"""
+        try:
+            return config_manager.get_device_info()
+        except Exception as e:
+            return {"error": f"获取设备信息失败: {e}"}
+
     # 监控相关方法
     def _get_training_status(self):
         """获取训练状态"""
@@ -514,13 +576,16 @@ class GradioApp:
         config_manager.reset_to_default()
         return config_manager.get_config_summary(), "✅ 配置已重置为默认值"
 
-    def _save_quick_config(self, epochs, batch_size, lr, conf_threshold, iou_threshold):
+    def _save_quick_config(self, epochs, batch_size, lr, device, conf_threshold, iou_threshold):
         """保存快速配置"""
         try:
+            device_id = parse_device_choice(device)
+
             config_manager.update_training_config(
                 epochs=epochs,
                 batch_size=batch_size,
-                learning_rate=lr
+                learning_rate=lr,
+                device=device_id
             )
             config_manager.update_inference_config(
                 conf_threshold=conf_threshold,
@@ -529,6 +594,10 @@ class GradioApp:
             return "✅ 快速配置已保存"
         except Exception as e:
             return f"❌ 保存配置失败: {e}"
+
+    def _on_quick_device_change(self, device_choice):
+        """快速配置中的设备切换"""
+        return self._on_device_change(device_choice)
 
     # 工具相关方法
     def _visualize_distribution(self):
