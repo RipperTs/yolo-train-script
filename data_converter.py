@@ -20,10 +20,37 @@ from config import (
 
 class DataConverter:
     """数据转换器类"""
-    
-    def __init__(self):
+
+    def __init__(self, source_dir=None):
+        self.source_dir = Path(source_dir) if source_dir else YOLO_POINT_DIR
         self.class_to_id = {name: idx for idx, name in enumerate(CLASS_NAMES)}
         ensure_directories()
+
+    def check_source_directory(self):
+        """检查源目录状态"""
+        if not self.source_dir.exists():
+            return {
+                "status": "not_exists",
+                "message": f"源目录不存在: {self.source_dir}",
+                "path": str(self.source_dir)
+            }
+
+        json_files = list(self.source_dir.glob("*.json"))
+        if not json_files:
+            return {
+                "status": "empty",
+                "message": f"源目录中没有JSON文件: {self.source_dir}",
+                "path": str(self.source_dir),
+                "file_count": 0
+            }
+
+        return {
+            "status": "ready",
+            "message": f"找到 {len(json_files)} 个JSON文件",
+            "path": str(self.source_dir),
+            "file_count": len(json_files),
+            "files": [f.name for f in json_files[:5]]  # 显示前5个文件名
+        }
     
     def convert_json_to_yolo(self, json_file_path: Path) -> List[str]:
         """
@@ -121,11 +148,11 @@ class DataConverter:
             
             image_name = data.get('imagePath', '')
             if image_name:
-                # 假设图片在yolo_point目录的同级目录或子目录中
+                # 假设图片在源目录的同级目录或子目录中
                 possible_paths = [
-                    YOLO_POINT_DIR / image_name,
-                    YOLO_POINT_DIR.parent / image_name,
-                    YOLO_POINT_DIR.parent / "images" / image_name,
+                    self.source_dir / image_name,
+                    self.source_dir.parent / image_name,
+                    self.source_dir.parent / "images" / image_name,
                 ]
                 
                 for path in possible_paths:
@@ -135,7 +162,7 @@ class DataConverter:
             # 如果找不到，尝试根据JSON文件名推断图片名
             base_name = json_file_path.stem
             for ext in ['.jpg', '.jpeg', '.png', '.bmp']:
-                image_path = YOLO_POINT_DIR.parent / f"{base_name}{ext}"
+                image_path = self.source_dir / f"{base_name}{ext}"
                 if image_path.exists():
                     return image_path
                     
@@ -205,13 +232,19 @@ class DataConverter:
     
     def convert_all(self):
         """转换所有数据"""
-        print("开始转换数据...")
-        
+        print(f"开始转换数据，源目录: {self.source_dir}")
+
+        # 检查源目录状态
+        status = self.check_source_directory()
+        if status["status"] != "ready":
+            print(status["message"])
+            return status
+
         # 获取所有JSON文件
-        json_files = list(YOLO_POINT_DIR.glob("*.json"))
+        json_files = list(self.source_dir.glob("*.json"))
         if not json_files:
-            print(f"在 {YOLO_POINT_DIR} 中没有找到JSON文件")
-            return
+            print(f"在 {self.source_dir} 中没有找到JSON文件")
+            return status
         
         print(f"找到 {len(json_files)} 个JSON文件")
         

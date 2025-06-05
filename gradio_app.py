@@ -20,6 +20,7 @@ sys.path.append(str(Path(__file__).parent))
 from gradio_utils import log_monitor, training_monitor, dataset_manager, model_manager
 from config_manager import config_manager
 from device_manager import device_manager, get_device_choices_for_gradio, parse_device_choice
+from dataset_manager import dataset_directory_manager
 from data_converter import DataConverter
 from trainer import YOLOv8Trainer
 from inference import YOLOv8Inference
@@ -71,34 +72,74 @@ class GradioApp:
     def _create_data_tab(self):
         """创建数据管理标签页"""
         gr.Markdown("## 数据集管理")
-        
+
         with gr.Row():
             with gr.Column():
+                gr.Markdown("### 数据源目录")
+
+                # 当前目录显示
+                current_dir_info = gr.JSON(label="当前数据源目录", value=dataset_directory_manager.get_current_directory_info())
+
+                # 目录选择
+                with gr.Row():
+                    directory_input = gr.Textbox(
+                        label="数据源目录路径",
+                        placeholder="输入目录路径或使用下方建议",
+                        value=str(dataset_directory_manager.current_source_dir)
+                    )
+                    set_dir_btn = gr.Button("📁 设置目录", size="sm")
+
+                # 目录建议
+                suggestions = dataset_directory_manager.get_directory_suggestions()
+                if suggestions:
+                    dir_suggestions = gr.Dropdown(
+                        choices=suggestions,
+                        label="目录建议",
+                        info="选择常见的数据目录"
+                    )
+                    dir_suggestions.change(
+                        lambda x: x,
+                        inputs=[dir_suggestions],
+                        outputs=[directory_input]
+                    )
+
+                # 转换预览
+                gr.Markdown("### 转换预览")
+                conversion_preview = gr.JSON(label="转换预览信息")
+                preview_btn = gr.Button("👁️ 预览转换")
+
                 gr.Markdown("### 数据转换")
-                convert_btn = gr.Button("🔄 转换JSON数据到YOLO格式", variant="primary")
+                convert_btn = gr.Button("🔄 转换数据到YOLO格式", variant="primary")
                 convert_output = gr.Textbox(label="转换结果", lines=5)
-                
-                gr.Markdown("### 数据集检查")
-                check_btn = gr.Button("✅ 检查数据集完整性")
-                check_output = gr.Textbox(label="检查结果", lines=5)
-                
+
             with gr.Column():
+                gr.Markdown("### 目录验证")
+                directory_status = gr.JSON(label="目录状态")
+                validate_btn = gr.Button("✅ 验证目录")
+
                 gr.Markdown("### 数据集信息")
                 dataset_info = gr.JSON(label="数据集统计")
                 refresh_info_btn = gr.Button("🔄 刷新信息")
-                
+
                 gr.Markdown("### 样本预览")
                 sample_gallery = gr.Gallery(label="样本图片", columns=3, rows=2)
                 refresh_samples_btn = gr.Button("🔄 刷新样本")
-        
+
         # 绑定事件
+        set_dir_btn.click(
+            self._set_source_directory,
+            inputs=[directory_input],
+            outputs=[current_dir_info, directory_status, conversion_preview]
+        )
+        validate_btn.click(
+            self._validate_directory,
+            inputs=[directory_input],
+            outputs=[directory_status]
+        )
+        preview_btn.click(self._get_conversion_preview, outputs=conversion_preview)
         convert_btn.click(self._convert_data, outputs=convert_output)
-        check_btn.click(self._check_dataset, outputs=check_output)
         refresh_info_btn.click(self._get_dataset_info, outputs=dataset_info)
         refresh_samples_btn.click(self._get_sample_images, outputs=sample_gallery)
-        
-        # 初始化数据
-        # refresh_info_btn.click(self._get_dataset_info, outputs=dataset_info)
     
     def _create_training_tab(self):
         """创建模型训练标签页"""
@@ -332,12 +373,53 @@ class GradioApp:
         # refresh_system_btn.click(self._get_system_info, outputs=system_info)
     
     # 数据管理相关方法
+    def _set_source_directory(self, directory_path):
+        """设置数据源目录"""
+        try:
+            result = dataset_directory_manager.set_source_directory(directory_path)
+
+            # 获取更新后的信息
+            current_info = dataset_directory_manager.get_current_directory_info()
+            preview_info = dataset_directory_manager.get_conversion_preview()
+
+            return current_info, result, preview_info
+        except Exception as e:
+            error_result = {
+                "success": False,
+                "message": f"❌ 设置目录失败: {e}"
+            }
+            return gr.update(), error_result, gr.update()
+
+    def _validate_directory(self, directory_path):
+        """验证目录"""
+        try:
+            from pathlib import Path
+            validation_result = dataset_directory_manager.validate_directory(Path(directory_path))
+            return {
+                "validation_result": validation_result,
+                "directory": directory_path
+            }
+        except Exception as e:
+            return {
+                "error": f"验证失败: {e}",
+                "directory": directory_path
+            }
+
+    def _get_conversion_preview(self):
+        """获取转换预览"""
+        try:
+            return dataset_directory_manager.get_conversion_preview()
+        except Exception as e:
+            return {"error": f"获取预览失败: {e}"}
+
     def _convert_data(self):
         """转换数据"""
         try:
-            converter = DataConverter()
-            converter.convert_all()
-            return "✅ 数据转换完成！"
+            result = dataset_directory_manager.convert_dataset()
+            if result["success"]:
+                return result["message"]
+            else:
+                return result["message"]
         except Exception as e:
             return f"❌ 数据转换失败: {e}"
     
@@ -359,6 +441,57 @@ class GradioApp:
     def _get_sample_images(self):
         """获取样本图片"""
         return dataset_manager.get_sample_images()
+
+    # 数据管理相关方法
+    def _set_source_directory(self, directory_path):
+        """设置数据源目录"""
+        try:
+            result = dataset_directory_manager.set_source_directory(directory_path)
+
+            # 获取更新后的信息
+            current_info = dataset_directory_manager.get_current_directory_info()
+            preview_info = dataset_directory_manager.get_conversion_preview()
+
+            return current_info, result, preview_info
+        except Exception as e:
+            error_result = {
+                "success": False,
+                "message": f"❌ 设置目录失败: {e}"
+            }
+            return gr.update(), error_result, gr.update()
+
+    def _validate_directory(self, directory_path):
+        """验证目录"""
+        try:
+            from pathlib import Path
+            validation_result = dataset_directory_manager.validate_directory(Path(directory_path))
+            return {
+                "validation_result": validation_result,
+                "directory": directory_path
+            }
+        except Exception as e:
+            return {
+                "error": f"验证失败: {e}",
+                "directory": directory_path
+            }
+
+    def _get_conversion_preview(self):
+        """获取转换预览"""
+        try:
+            return dataset_directory_manager.get_conversion_preview()
+        except Exception as e:
+            return {"error": f"获取预览失败: {e}"}
+
+    def _convert_data(self):
+        """转换数据"""
+        try:
+            result = dataset_directory_manager.convert_dataset()
+            if result["success"]:
+                return result["message"]
+            else:
+                return result["message"]
+        except Exception as e:
+            return f"❌ 数据转换失败: {e}"
 
     # 训练相关方法
     def _start_normal_training(self, epochs, batch_size, learning_rate, img_size, device):
