@@ -1,0 +1,12 @@
+tqdm
+
+# YOLO 训练推理所需相关依赖
+ultralytics
+opencv-python
+pillow
+matplotlib
+pandas
+scikit-learn
+numpy
+torch
+torchvision

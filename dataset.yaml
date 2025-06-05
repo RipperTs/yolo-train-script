@@ -1,0 +1,15 @@
+# YOLOv8 数据集配置文件
+# 自动生成于数据转换过程
+
+# 数据集路径 (相对于此文件的路径)
+path: /Users/wyf/PythonProject/yolo-train/datasets
+train: images/train
+val: images/val
+test: images/test
+
+# 类别数量
+nc: 1
+
+# 类别名称
+names:
+  0: p
