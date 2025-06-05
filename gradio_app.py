@@ -18,6 +18,7 @@ import json
 sys.path.append(str(Path(__file__).parent))
 
 from gradio_utils import log_monitor, training_monitor, dataset_manager, model_manager
+from training_logger import training_log_manager
 from config_manager import config_manager
 from device_manager import device_manager, get_device_choices_for_gradio, parse_device_choice
 from dataset_manager import dataset_directory_manager
@@ -151,7 +152,7 @@ class GradioApp:
                 epochs = gr.Slider(1, 1000, value=100, label="训练轮数")
                 batch_size = gr.Slider(1, 64, value=16, label="批次大小")
                 learning_rate = gr.Slider(0.0001, 0.1, value=0.01, label="学习率")
-                img_size = gr.Dropdown([320, 416, 512, 640, 832], value=640, label="图片尺寸")
+                img_size = gr.Dropdown([128, 320, 416, 512, 640, 832], value=320, label="图片尺寸")
 
                 # 智能设备选择
                 device_choices = get_device_choices_for_gradio()
@@ -190,12 +191,12 @@ class GradioApp:
         normal_train_btn.click(
             self._start_normal_training,
             inputs=[epochs, batch_size, learning_rate, img_size, device],
-            outputs=training_status
+            outputs=[training_status, training_log]
         )
         smart_train_btn.click(
             self._start_smart_training,
             inputs=[target_map50, target_box_loss, target_cls_loss, max_epochs],
-            outputs=training_status
+            outputs=[training_status, training_log]
         )
         resume_train_btn.click(self._resume_training, outputs=training_status)
         stop_train_btn.click(self._stop_training, outputs=training_status)
@@ -203,6 +204,20 @@ class GradioApp:
         # 设备相关事件
         device.change(self._on_device_change, inputs=[device], outputs=[batch_size, device_info])
         refresh_device_btn.click(self._refresh_device_info, outputs=device_info)
+
+        # 添加定时更新日志的功能
+        def update_training_log():
+            """定时更新训练日志"""
+            if self.is_training and training_log_manager.is_logging():
+                # 获取最新的训练日志内容
+                log_content = training_log_manager.get_current_logs(50)  # 获取最近50行
+                if log_content and log_content != "暂无训练日志":
+                    return log_content
+            return gr.update()
+
+        # 创建定时器，每2秒更新一次日志
+        timer = gr.Timer(2.0)
+        timer.tick(update_training_log, outputs=training_log)
     
     def _create_inference_tab(self):
         """创建模型推理标签页"""
@@ -497,7 +512,7 @@ class GradioApp:
     def _start_normal_training(self, epochs, batch_size, learning_rate, img_size, device):
         """开始普通训练"""
         if self.is_training:
-            return "⚠️ 训练正在进行中，请等待完成或停止当前训练"
+            return "⚠️ 训练正在进行中，请等待完成或停止当前训练", "训练正在进行中..."
 
         try:
             # 解析设备选择
@@ -518,14 +533,18 @@ class GradioApp:
             self.is_training = True
             self.training_thread.start()
 
-            return f"🚀 开始普通训练 - {epochs} epochs, batch_size={batch_size}"
+            status_msg = f"🚀 开始普通训练 - {epochs} epochs, batch_size={batch_size}"
+            log_msg = f"📡 训练已启动，实时日志捕获已开始...\n配置: epochs={epochs}, batch_size={batch_size}, lr={learning_rate}, device={device}"
+
+            return status_msg, log_msg
         except Exception as e:
-            return f"❌ 启动训练失败: {e}"
+            error_msg = f"❌ 启动训练失败: {e}"
+            return error_msg, error_msg
 
     def _start_smart_training(self, target_map50, target_box_loss, target_cls_loss, max_epochs):
         """开始智能训练"""
         if self.is_training:
-            return "⚠️ 训练正在进行中，请等待完成或停止当前训练"
+            return "⚠️ 训练正在进行中，请等待完成或停止当前训练", "训练正在进行中..."
 
         try:
             # 更新智能训练配置
@@ -542,9 +561,13 @@ class GradioApp:
             self.is_training = True
             self.training_thread.start()
 
-            return f"🤖 开始智能训练 - 目标mAP50={target_map50}, 最大轮数={max_epochs}"
+            status_msg = f"🤖 开始智能训练 - 目标mAP50={target_map50}, 最大轮数={max_epochs}"
+            log_msg = f"📡 智能训练已启动，实时日志捕获已开始...\n目标配置: mAP50={target_map50}, box_loss={target_box_loss}, cls_loss={target_cls_loss}, 最大轮数={max_epochs}"
+
+            return status_msg, log_msg
         except Exception as e:
-            return f"❌ 启动智能训练失败: {e}"
+            error_msg = f"❌ 启动智能训练失败: {e}"
+            return error_msg, error_msg
 
     def _resume_training(self):
         """恢复训练"""
@@ -686,7 +709,9 @@ class GradioApp:
     def _start_log_monitoring(self):
         """开始日志监控"""
         if log_monitor.start_monitoring():
-            return "📡 日志监控已启动"
+            # 返回初始日志内容
+            initial_logs = log_monitor.get_recent_logs_as_string(100)
+            return initial_logs if initial_logs != "没有找到日志文件" else "📡 日志监控已启动，等待日志输出..."
         return "❌ 启动日志监控失败"
 
     def _stop_log_monitoring(self):

@@ -14,9 +14,10 @@ import torch
 sys.path.append(str(Path(__file__).parent))
 
 from config import (
-    TRAINING_CONFIG, MODEL_CONFIG, DATASETS_DIR, MODELS_DIR, 
+    TRAINING_CONFIG, MODEL_CONFIG, DATASETS_DIR, MODELS_DIR,
     LOG_CONFIG, AUGMENTATION_CONFIG, ensure_directories
 )
+from training_logger import training_log_manager
 
 
 class YOLOv8Trainer:
@@ -99,19 +100,27 @@ class YOLOv8Trainer:
         
         print("开始训练...")
         print(f"训练参数: {train_args}")
-        
+
         try:
+            # 启动训练日志捕获
+            log_file = training_log_manager.start_training_logging()
+            print(f"📁 训练日志将保存到: {log_file}")
+
             # 开始训练
             results = self.model.train(**train_args)
-            
+
             print("训练完成!")
             print(f"最佳模型保存在: {results.save_dir}")
-            
+
             return results
-            
+
         except Exception as e:
-            print(f"训练过程中出错: {e}")
+            error_msg = f"训练过程中出错: {e}"
+            print(error_msg)
             raise
+        finally:
+            # 停止日志捕获
+            training_log_manager.stop_training_logging()
     
     def validate(self, model_path: str = None):
         """

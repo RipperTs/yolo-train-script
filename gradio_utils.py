@@ -56,14 +56,27 @@ class LogMonitor:
     
     def find_latest_log(self) -> Optional[str]:
         """查找最新的日志文件"""
-        log_dir = LOG_CONFIG["log_dir"]
-        if not log_dir.exists():
-            return None
-            
-        log_files = list(log_dir.glob("**/*.log"))
+        # 查找可能的日志位置
+        possible_dirs = [
+            LOG_CONFIG["log_dir"],  # 配置的日志目录
+            Path("logs"),           # 项目logs目录
+            Path("runs"),           # YOLO runs目录
+            Path("models"),         # 模型目录
+            Path("."),              # 当前目录
+        ]
+
+        log_files = []
+        for log_dir in possible_dirs:
+            if log_dir.exists():
+                # 查找各种日志文件
+                patterns = ["*.log", "**/*.log", "**/train.log", "**/results.csv"]
+                for pattern in patterns:
+                    log_files.extend(log_dir.glob(pattern))
+
         if not log_files:
             return None
-            
+
+        # 返回最新修改的日志文件
         latest_log = max(log_files, key=lambda x: x.stat().st_mtime)
         return str(latest_log)
     
@@ -93,18 +106,23 @@ class LogMonitor:
                 break
         return logs
     
-    def get_recent_logs(self, num_lines: int = 100) -> str:
+    def get_recent_logs(self, num_lines: int = 100) -> List[str]:
         """获取最近的日志内容"""
         if not self.current_log_file or not Path(self.current_log_file).exists():
-            return "没有找到日志文件"
-            
+            return ["没有找到日志文件"]
+
         try:
             with open(self.current_log_file, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
                 recent_lines = lines[-num_lines:] if len(lines) > num_lines else lines
-                return ''.join(recent_lines)
+                return [line.strip() for line in recent_lines if line.strip()]
         except Exception as e:
-            return f"读取日志文件错误: {e}"
+            return [f"读取日志文件错误: {e}"]
+
+    def get_recent_logs_as_string(self, num_lines: int = 100) -> str:
+        """获取最近的日志内容作为字符串"""
+        logs = self.get_recent_logs(num_lines)
+        return '\n'.join(logs)
 
 
 class TrainingMonitor:
