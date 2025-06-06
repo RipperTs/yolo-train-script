@@ -238,25 +238,68 @@ class SmartTrainer:
     def continue_training(self, additional_epochs=50, model_path=None):
         """继续训练"""
         print(f"🚀 继续训练 {additional_epochs} 个epochs...")
-        
+
         try:
-            # 修改配置以继续训练
-            from config import TRAINING_CONFIG
-            continue_config = TRAINING_CONFIG.copy()
-            continue_config['epochs'] = additional_epochs
-            
-            # 使用trainer进行恢复训练
-            success = self.trainer.train(resume=True, resume_path=model_path)
-            
-            if success:
-                print("✅ 继续训练完成！")
-                return True
-            else:
-                print("❌ 继续训练失败")
-                return False
-                
+            # 更新配置以继续训练
+            from config_manager import config_manager
+            config_manager.update_training_config(epochs=additional_epochs)
+
+            # 首先尝试恢复训练
+            try:
+                success = self.trainer.train(resume=True, resume_path=model_path)
+                if success:
+                    print("✅ 继续训练完成！")
+                    return True
+            except Exception as resume_error:
+                error_msg = str(resume_error)
+                if "nothing to resume" in error_msg or "is finished" in error_msg:
+                    print(f"⚠️ 无法恢复训练: {resume_error}")
+                    print("🔄 将开始新的训练会话...")
+
+                    # 开始新的训练会话
+                    return self._start_new_training_session(additional_epochs, model_path)
+                else:
+                    raise resume_error
+
+            print("❌ 继续训练失败")
+            return False
+
         except Exception as e:
             print(f"❌ 继续训练时出错: {e}")
+            return False
+
+    def _start_new_training_session(self, epochs=50, model_path=None):
+        """开始新的训练会话（不使用resume）"""
+        print(f"🆕 开始新的训练会话: {epochs} epochs")
+
+        try:
+            # 如果指定了模型路径，使用该模型作为预训练模型
+            if model_path and Path(model_path).exists():
+                from ultralytics import YOLO
+                self.trainer.model = YOLO(str(model_path))
+                print(f"📂 使用预训练模型: {model_path}")
+            elif not model_path:
+                # 尝试找到最新的最佳模型
+                latest_dir = self.find_latest_training()
+                if latest_dir:
+                    best_model = latest_dir / "weights" / "best.pt"
+                    if best_model.exists():
+                        from ultralytics import YOLO
+                        self.trainer.model = YOLO(str(best_model))
+                        print(f"📂 使用最新的最佳模型: {best_model}")
+
+            # 开始训练（不使用resume）
+            results = self.trainer.train(resume=False)
+
+            if results:
+                print("✅ 新训练会话完成！")
+                return True
+            else:
+                print("❌ 新训练会话失败")
+                return False
+
+        except Exception as e:
+            print(f"❌ 新训练会话时出错: {e}")
             return False
     
     def smart_training_loop(self, initial_epochs=100, continue_epochs=50, max_total_epochs=500):
