@@ -137,10 +137,13 @@ class DeviceManager:
         except:
             return "Unknown"
     
-    def set_device(self, device_id: str) -> bool:
-        """设置当前设备"""
-        device_info = self.get_device_info(device_id)
-        if device_info and device_info["available"]:
+    def set_device(self, device_id: str, auto_fallback: bool = True) -> bool:
+        """设置当前设备，支持自动降级"""
+        # 首先验证设备是否真实可用
+        validation_result = self.validate_device_availability(device_id)
+        
+        if validation_result["available"]:
+            # 设备可用，直接设置
             self.current_device = device_id
             
             # 设置PyTorch默认设备
@@ -151,12 +154,54 @@ class DeviceManager:
                     # MPS设备设置
                     pass
                 
+                print(f"✅ 成功设置设备: {device_id}")
                 return True
             except Exception as e:
-                print(f"设置设备失败: {e}")
+                print(f"❌ 设置设备失败: {e}")
+                if auto_fallback:
+                    fallback_device = validation_result.get("fallback_device") or self.get_fallback_device(device_id)
+                    print(f"🔄 尝试降级到设备: {fallback_device}")
+                    return self.set_device(fallback_device, auto_fallback=False)
                 return False
+        else:
+            # 设备不可用
+            if validation_result["warnings"]:
+                for warning in validation_result["warnings"]:
+                    print(f"⚠️ {warning}")
+            
+            if auto_fallback and validation_result["fallback_device"]:
+                fallback_device = validation_result["fallback_device"]
+                print(f"🔄 自动降级到设备: {fallback_device}")
+                return self.set_device(fallback_device, auto_fallback=False)
+            
+            return False
+    
+    def get_best_available_device(self) -> str:
+        """获取当前最佳可用设备"""
+        # 按优先级检查设备可用性
+        priority_devices = []
         
-        return False
+        # 添加CUDA设备
+        for device in self.available_devices:
+            if device["type"] == "cuda":
+                priority_devices.append(device["id"])
+        
+        # 添加MPS设备
+        for device in self.available_devices:
+            if device["type"] == "mps":
+                priority_devices.append(device["id"])
+        
+        # 添加CPU设备
+        priority_devices.append("cpu")
+        
+        # 逐个验证设备可用性
+        for device_id in priority_devices:
+            validation_result = self.validate_device_availability(device_id)
+            if validation_result["available"]:
+                return device_id
+        
+        # 如果所有设备都不可用，返回CPU作为最后的选择
+        return "cpu"
     
     def get_optimal_batch_size(self, device_id: str, image_size: int = 640) -> int:
         """根据设备推荐批次大小"""
@@ -184,6 +229,79 @@ class DeviceManager:
             return 8  # MPS设备的推荐批次
         
         return 16
+    
+    def validate_device_availability(self, device_id: str) -> Dict:
+        """验证设备是否真实可用（运行时检查）"""
+        result = {
+            "available": False,
+            "device_id": device_id,
+            "warnings": [],
+            "fallback_device": None
+        }
+        
+        device_info = self.get_device_info(device_id)
+        if not device_info:
+            result["warnings"].append(f"设备 {device_id} 不存在")
+            result["fallback_device"] = self.get_fallback_device(device_id)
+            return result
+        
+        try:
+            # 尝试创建测试张量来验证设备真实可用性
+            if device_id == "cpu":
+                test_tensor = torch.randn(2, 2)
+                result["available"] = True
+                
+            elif device_id.startswith("cuda"):
+                if torch.cuda.is_available():
+                    test_tensor = torch.randn(2, 2).to(device_id)
+                    result["available"] = True
+                else:
+                    result["warnings"].append("CUDA运行时不可用")
+                    result["fallback_device"] = self.get_fallback_device(device_id)
+                    
+            elif device_id == "mps":
+                if torch.backends.mps.is_available():
+                    # 尝试创建MPS张量
+                    test_tensor = torch.randn(2, 2).to("mps")
+                    result["available"] = True
+                else:
+                    result["warnings"].append("MPS运行时不可用")
+                    result["fallback_device"] = self.get_fallback_device(device_id)
+            
+        except Exception as e:
+            result["warnings"].append(f"设备测试失败: {str(e)}")
+            result["fallback_device"] = self.get_fallback_device(device_id)
+        
+        return result
+    
+    def get_fallback_device(self, failed_device_id: str) -> str:
+        """获取降级设备"""
+        # 设备降级优先级策略
+        if failed_device_id.startswith("cuda"):
+            # CUDA失败 -> MPS -> CPU
+            for device in self.available_devices:
+                if device["type"] == "mps" and device["available"]:
+                    # 验证MPS是否真实可用
+                    mps_check = self.validate_device_availability("mps")
+                    if mps_check["available"]:
+                        print(f"⚠️ CUDA设备不可用，降级到MPS设备")
+                        return "mps"
+            print(f"⚠️ CUDA和MPS设备都不可用，降级到CPU")
+            return "cpu"
+            
+        elif failed_device_id == "mps":
+            # MPS失败 -> CUDA -> CPU
+            for device in self.available_devices:
+                if device["type"] == "cuda" and device["available"]:
+                    cuda_check = self.validate_device_availability(device["id"])
+                    if cuda_check["available"]:
+                        print(f"⚠️ MPS设备不可用，降级到CUDA设备: {device['id']}")
+                        return device["id"]
+            print(f"⚠️ MPS和CUDA设备都不可用，降级到CPU")
+            return "cpu"
+        
+        # 其他情况或CPU失败，返回CPU（CPU应该总是可用的）
+        return "cpu"
     
     def validate_device_compatibility(self, device_id: str) -> Dict:
         """验证设备兼容性"""
@@ -216,6 +334,19 @@ class DeviceManager:
                 if torch.backends.mps.is_available():
                     result["compatible"] = True
                     result["recommendations"].append("MPS加速可用")
+                    
+                    # 检查PyTorch版本是否支持MPS
+                    pytorch_version = torch.__version__
+                    result["recommendations"].append(f"PyTorch版本: {pytorch_version}")
+                    
+                    # 检查macOS版本（MPS需要macOS 12.3+）
+                    try:
+                        import platform
+                        macos_version = platform.mac_ver()[0]
+                        if macos_version:
+                            result["recommendations"].append(f"macOS版本: {macos_version}")
+                    except:
+                        pass
                 else:
                     result["warnings"].append("MPS不可用")
             except:

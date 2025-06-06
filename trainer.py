@@ -15,9 +15,11 @@ sys.path.append(str(Path(__file__).parent))
 
 from config import (
     TRAINING_CONFIG, MODEL_CONFIG, DATASETS_DIR, MODELS_DIR,
-    LOG_CONFIG, AUGMENTATION_CONFIG, ensure_directories
+    LOG_CONFIG, AUGMENTATION_CONFIG, ensure_directories, get_default_device
 )
 from training_logger import training_log_manager
+from config_manager import config_manager
+from device_manager import device_manager
 
 
 class YOLOv8Trainer:
@@ -69,17 +71,28 @@ class YOLOv8Trainer:
         if self.model is None:
             self.setup_model()
         
+        # 获取当前配置的设备
+        current_config = config_manager.get_training_config()
+        target_device = current_config.get("device") or get_default_device()
+        
+        # 验证并设置设备
+        if not device_manager.set_device(target_device):
+            print(f"⚠️ 无法使用设备 {target_device}，使用降级设备")
+        
+        actual_device = device_manager.current_device
+        print(f"🎯 使用训练设备: {actual_device}")
+        
         # 训练参数
         train_args = {
             "data": str(self.dataset_yaml),
-            "epochs": TRAINING_CONFIG["epochs"],
-            "batch": TRAINING_CONFIG["batch_size"],
-            "imgsz": TRAINING_CONFIG["img_size"],
-            "lr0": TRAINING_CONFIG["learning_rate"],
-            "patience": TRAINING_CONFIG["patience"],
-            "save_period": TRAINING_CONFIG["save_period"],
-            "workers": TRAINING_CONFIG["workers"],
-            "device": "cpu",  # 强制使用CPU
+            "epochs": current_config["epochs"],
+            "batch": current_config["batch_size"],
+            "imgsz": current_config["img_size"],
+            "lr0": current_config["learning_rate"],
+            "patience": current_config["patience"],
+            "save_period": current_config["save_period"],
+            "workers": current_config["workers"],
+            "device": actual_device,  # 使用验证后的设备
             "project": str(MODELS_DIR),
             "name": f"train_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             "exist_ok": True,
@@ -139,12 +152,23 @@ class YOLOv8Trainer:
         
         print("开始验证...")
         
+        # 获取当前设备配置
+        current_config = config_manager.get_training_config()
+        target_device = current_config.get("device") or get_default_device()
+        
+        # 验证并设置设备
+        if not device_manager.set_device(target_device):
+            print(f"⚠️ 无法使用设备 {target_device}，使用降级设备")
+        
+        actual_device = device_manager.current_device
+        print(f"🎯 使用验证设备: {actual_device}")
+        
         # 验证参数
         val_args = {
             "data": str(self.dataset_yaml),
-            "imgsz": TRAINING_CONFIG["img_size"],
-            "batch": TRAINING_CONFIG["batch_size"],
-            "device": "cpu",  # 强制使用CPU
+            "imgsz": current_config["img_size"],
+            "batch": current_config["batch_size"],
+            "device": actual_device,  # 使用验证后的设备
             "verbose": True,
         }
         

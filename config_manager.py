@@ -105,8 +105,13 @@ class ConfigManager:
     def update_inference_config(self, **kwargs):
         """更新推理配置"""
         for key, value in kwargs.items():
-            if key in self.current_config["inference"]:
+            if key in self.current_config["inference"] or key == "device":
                 self.current_config["inference"][key] = value
+                
+                # 如果更新了设备，同时更新设备管理器
+                if key == "device":
+                    device_manager.set_device(value)
+                    
         self.save_config()
     
     def get_augmentation_config(self) -> Dict[str, Any]:
@@ -174,11 +179,60 @@ class ConfigManager:
             self.save_config()
             return True
         return False
+    
+    def optimize_config_for_device(self, device_id: str):
+        """根据设备类型优化配置"""
+        recommendations = self.get_device_recommendations(device_id)
+        
+        # 更新训练配置
+        training_updates = {}
+        if "batch_size" in recommendations:
+            training_updates["batch_size"] = recommendations["batch_size"]
+        if "workers" in recommendations:
+            training_updates["workers"] = recommendations["workers"]
+        
+        # 设备特定优化
+        if device_id == "mps":
+            # MPS设备优化
+            training_updates.update({
+                "amp": False,  # 禁用自动混合精度
+                "cache": False,  # 禁用数据集缓存以节省内存
+            })
+        elif device_id.startswith("cuda"):
+            # CUDA设备优化
+            training_updates.update({
+                "amp": True,   # 启用自动混合精度
+                "cache": True,  # 启用数据集缓存
+            })
+        else:  # CPU
+            # CPU设备优化
+            training_updates.update({
+                "amp": False,  # CPU不支持混合精度
+                "cache": False,  # CPU内存有限，禁用缓存
+            })
+        
+        # 应用优化配置
+        if training_updates:
+            self.update_training_config(**training_updates)
+            print(f"✅ 已为设备 {device_id} 优化配置: {training_updates}")
+        
+        return training_updates
 
     def get_device_recommendations(self, device_id: str) -> Dict[str, Any]:
         """获取设备推荐配置"""
         from device_manager import get_recommended_settings
-        return get_recommended_settings(device_id)
+        recommendations = get_recommended_settings(device_id)
+        
+        # 添加MPS特定的优化建议
+        if device_id == "mps":
+            recommendations.update({
+                "mixed_precision": False,  # MPS可能不完全支持混合精度
+                "pin_memory": False,       # MPS使用共享内存
+                "persistent_workers": True, # 提高数据加载效率
+                "prefetch_factor": 2,      # 预取因子
+            })
+        
+        return recommendations
     
     def reset_to_default(self):
         """重置为默认配置"""

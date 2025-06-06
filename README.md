@@ -98,6 +98,21 @@ python run.py --pipeline inference --images path/to/images/
 4. 复制图片文件到对应目录
 5. 生成YOLO数据集配置文件
 
+### 设备支持
+
+系统支持多种计算设备，自动选择最佳可用设备：
+
+- **🖥️ CPU**: 兼容性最好，适合小规模训练和测试
+- **🚀 CUDA GPU**: 高性能训练，支持NVIDIA显卡
+- **🍎 Apple MPS**: 苹果M芯片GPU加速，支持M1/M2/M3等芯片
+
+**设备自动选择优先级**: CUDA > MPS > CPU
+
+**MPS设备要求**:
+- macOS 12.3+ 
+- Apple Silicon芯片 (M1/M2/M3等)
+- PyTorch 1.12+ 且支持MPS
+
 ### 训练配置
 
 可以在`config.py`中修改训练参数：
@@ -109,9 +124,15 @@ TRAINING_CONFIG = {
     "img_size": 640,         # 图片尺寸
     "learning_rate": 0.01,   # 学习率
     "patience": 50,          # 早停耐心值
-    "device": "auto",        # 设备选择
+    "device": None,          # 设备选择（None=自动选择）
 }
 ```
+
+**设备配置说明**:
+- `None`: 自动选择最佳可用设备
+- `"cpu"`: 强制使用CPU
+- `"cuda:0"`: 使用指定的CUDA设备
+- `"mps"`: 使用Apple MPS设备
 
 ### 推理配置
 
@@ -193,7 +214,23 @@ python trainer.py --action val --model path/to/model.pt
 python trainer.py --action export --model path/to/model.pt --format onnx
 ```
 
-### 4. 数据集工具
+### 4. 设备测试
+
+测试MPS设备支持（苹果M芯片用户）：
+
+```bash
+# 运行完整的MPS支持测试
+python test_mps_support.py
+
+# 测试特定功能
+python test_mps_support.py --test pytorch    # 测试PyTorch MPS支持
+python test_mps_support.py --test device     # 测试设备管理器
+python test_mps_support.py --test config     # 测试配置管理器
+python test_mps_support.py --test trainer    # 测试训练器
+python test_mps_support.py --test inference  # 测试推理器
+```
+
+### 5. 数据集工具
 
 检查数据集完整性：
 
@@ -219,7 +256,7 @@ python utils.py --action visualize --image path/to/image.jpg
 python utils.py --action anchors
 ```
 
-### 5. 创建数据子集
+### 6. 创建数据子集
 
 从现有数据集创建小的子集用于快速测试：
 
@@ -277,7 +314,13 @@ MODELS_DIR = YOLO_ROOT / "models"             # 模型目录
    - 运行`python utils.py --action check`查看具体问题
    - 检查JSON标注文件格式是否正确
 
-4. **训练不收敛**
+4. **MPS设备问题**
+   - 确认macOS版本 >= 12.3
+   - 确认使用Apple Silicon芯片
+   - 更新PyTorch到最新版本：`pip install --upgrade torch`
+   - 运行设备测试：`python test_mps_support.py`
+
+5. **训练不收敛**
    - 检查数据质量和标注准确性
    - 调整学习率
    - 增加训练轮数
@@ -285,9 +328,11 @@ MODELS_DIR = YOLO_ROOT / "models"             # 模型目录
 ### 性能优化
 
 1. **训练速度优化**
-   - 使用GPU训练
-   - 增加`workers`数量
+   - 使用GPU训练（CUDA或MPS）
+   - 苹果M芯片用户：确保启用MPS加速
+   - 增加`workers`数量（MPS推荐4-8个）
    - 使用更小的模型（yolov8n vs yolov8x）
+   - MPS设备推荐批次大小：8
 
 2. **推理速度优化**
    - 导出为ONNX格式

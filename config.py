@@ -34,8 +34,8 @@ TRAINING_CONFIG = {
     "learning_rate": 0.01,
     "patience": 50,  # 早停耐心值
     "save_period": 10,  # 每10个epoch保存一次模型
-    "workers": 2,  # 数据加载器工作进程数 (Mac上减少worker数量)
-    "device": "cpu",  # 强制使用CPU (Mac不支持CUDA)
+    "workers": 2,  # 数据加载器工作进程数
+    "device": None,  # 设备将由设备管理器自动选择最佳可用设备
 }
 
 # 推理配置
@@ -92,6 +92,16 @@ def ensure_directories():
 
     for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
+
+def get_default_device():
+    """获取默认训练设备"""
+    # 延迟导入避免循环依赖
+    try:
+        from device_manager import device_manager
+        return device_manager.get_best_available_device()
+    except ImportError:
+        # 如果设备管理器不可用，返回CPU作为安全选择
+        return "cpu"
 
 if __name__ == "__main__":
     ensure_directories()

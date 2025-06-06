@@ -14,27 +14,53 @@ from PIL import Image
 # 添加当前目录到Python路径
 sys.path.append(str(Path(__file__).parent))
 
-from config import INFERENCE_CONFIG, CLASS_NAMES, MODELS_DIR
+from config import INFERENCE_CONFIG, CLASS_NAMES, MODELS_DIR, get_default_device
+from config_manager import config_manager
+from device_manager import device_manager
 
 
 class YOLOv8Inference:
     """YOLOv8推理器类"""
     
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: str = None, device: str = None):
         """
         初始化推理器
         
         Args:
             model_path: 模型路径，如果为None则尝试加载最新的训练模型
+            device: 推理设备，如果为None则使用配置中的设备或自动选择
         """
         self.model = None
         self.model_path = model_path
         self.class_names = CLASS_NAMES
+        self.device = device
         
         if model_path is None:
             self.model_path = self._find_latest_model()
         
+        # 设置推理设备
+        self._setup_device()
+        
         self.load_model()
+    
+    def _setup_device(self):
+        """设置推理设备"""
+        if self.device is None:
+            # 从配置管理器获取推理设备设置
+            inference_config = config_manager.get_inference_config()
+            self.device = inference_config.get("device")
+            
+            # 如果配置中也没有设备设置，使用训练配置的设备
+            if self.device is None:
+                training_config = config_manager.get_training_config()
+                self.device = training_config.get("device") or get_default_device()
+        
+        # 验证并设置设备
+        if not device_manager.set_device(self.device):
+            print(f"⚠️ 无法使用推理设备 {self.device}，使用降级设备")
+        
+        self.device = device_manager.current_device
+        print(f"🎯 使用推理设备: {self.device}")
     
     def _find_latest_model(self) -> str:
         """查找最新的训练模型"""
@@ -92,13 +118,17 @@ class YOLOv8Inference:
         if not image_path.exists():
             raise FileNotFoundError(f"图片文件不存在: {image_path}")
         
+        # 获取当前推理配置
+        inference_config = config_manager.get_inference_config()
+        
         # 进行预测
         results = self.model(
             str(image_path),
-            conf=INFERENCE_CONFIG["conf_threshold"],
-            iou=INFERENCE_CONFIG["iou_threshold"],
-            max_det=INFERENCE_CONFIG["max_det"],
-            imgsz=INFERENCE_CONFIG["img_size"],
+            conf=inference_config.get("conf_threshold", INFERENCE_CONFIG["conf_threshold"]),
+            iou=inference_config.get("iou_threshold", INFERENCE_CONFIG["iou_threshold"]),
+            max_det=inference_config.get("max_det", INFERENCE_CONFIG["max_det"]),
+            imgsz=inference_config.get("img_size", INFERENCE_CONFIG["img_size"]),
+            device=self.device,  # 使用配置的设备
             save=save_result,
             verbose=False
         )
