@@ -290,9 +290,34 @@ class ModelManager:
         model_files = []
         for pattern in ["**/*.pt", "**/*best.pt", "**/best.pt"]:
             model_files.extend(MODELS_DIR.glob(pattern))
-        
-        return [str(f) for f in model_files]
-    
+
+        # 返回相对于项目根目录的路径
+        project_root = Path(__file__).parent  # 项目根目录
+        relative_paths = []
+
+        for model_file in model_files:
+            try:
+                # 计算相对路径
+                relative_path = model_file.relative_to(project_root)
+                relative_paths.append(str(relative_path))
+            except ValueError:
+                # 如果无法计算相对路径，使用绝对路径
+                relative_paths.append(str(model_file))
+
+        return relative_paths
+
+    def get_absolute_path(self, relative_path: str) -> str:
+        """将相对路径转换为绝对路径"""
+        if Path(relative_path).is_absolute():
+            # 如果已经是绝对路径，直接返回
+            return relative_path
+
+        # 相对于项目根目录的路径
+        project_root = Path(__file__).parent
+        absolute_path = project_root / relative_path
+
+        return str(absolute_path)
+
     def get_model_info(self, model_path: str) -> Dict:
         """获取模型信息"""
         model_path = Path(model_path)

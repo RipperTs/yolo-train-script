@@ -213,7 +213,7 @@ class GradioApp:
                 log_content = training_log_manager.get_current_logs(50)  # 获取最近50行
                 if log_content and log_content != "暂无训练日志":
                     return log_content
-            return gr.update()
+            return gr.skip()
 
         # 创建定时器，每2秒更新一次日志
         timer = gr.Timer(2.0)
@@ -403,7 +403,7 @@ class GradioApp:
                 "success": False,
                 "message": f"❌ 设置目录失败: {e}"
             }
-            return gr.update(), error_result, gr.update()
+            return gr.skip(), error_result, gr.skip()
 
     def _validate_directory(self, directory_path):
         """验证目录"""
@@ -473,7 +473,7 @@ class GradioApp:
                 "success": False,
                 "message": f"❌ 设置目录失败: {e}"
             }
-            return gr.update(), error_result, gr.update()
+            return gr.skip(), error_result, gr.skip()
 
     def _validate_directory(self, directory_path):
         """验证目录"""
@@ -624,7 +624,8 @@ class GradioApp:
     def _refresh_models(self):
         """刷新模型列表"""
         models = model_manager.get_available_models()
-        return gr.Dropdown.update(choices=models, value=models[0] if models else None)
+        # 在新版本的Gradio中，直接返回新的选择列表
+        return gr.Dropdown(choices=models, value=models[0] if models else None)
 
     def _single_inference(self, model_path, image_path, conf_threshold, iou_threshold, max_det):
         """单图推理"""
@@ -632,6 +633,9 @@ class GradioApp:
             return None, {"error": "请选择模型和上传图片"}
 
         try:
+            # 转换相对路径为绝对路径
+            absolute_model_path = model_manager.get_absolute_path(model_path)
+
             # 更新推理配置
             config_manager.update_inference_config(
                 conf_threshold=conf_threshold,
@@ -639,7 +643,7 @@ class GradioApp:
                 max_det=max_det
             )
 
-            inference = YOLOv8Inference(model_path)
+            inference = YOLOv8Inference(absolute_model_path)
             result = inference.predict_image(image_path)
 
             # 可视化结果
@@ -689,10 +693,10 @@ class GradioApp:
 
                 return recommended_batch, device_info
             else:
-                return gr.update(), {"error": "设备切换失败"}
+                return gr.skip(), {"error": "设备切换失败"}
 
         except Exception as e:
-            return gr.update(), {"error": f"设备切换出错: {e}"}
+            return gr.skip(), {"error": f"设备切换出错: {e}"}
 
     def _refresh_device_info(self):
         """刷新设备信息"""
