@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 
 from config import (
     TRAINING_CONFIG, INFERENCE_CONFIG, AUGMENTATION_CONFIG,
-    MODEL_CONFIG, CLASS_NAMES, TRAIN_RATIO, VAL_RATIO, TEST_RATIO
+    MODEL_CONFIG, TRAIN_RATIO, VAL_RATIO, TEST_RATIO
 )
 from device_manager import device_manager
 
@@ -31,7 +31,7 @@ class ConfigManager:
             "augmentation": copy.deepcopy(AUGMENTATION_CONFIG),
             "model": copy.deepcopy(MODEL_CONFIG),
             "dataset": {
-                "class_names": CLASS_NAMES.copy(),
+                "class_names": [],  # 类别名称现在由ClassManager管理
                 "train_ratio": TRAIN_RATIO,
                 "val_ratio": VAL_RATIO,
                 "test_ratio": TEST_RATIO

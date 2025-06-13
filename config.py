@@ -22,9 +22,9 @@ TRAIN_RATIO = 0.7
 VAL_RATIO = 0.2
 TEST_RATIO = 0.1
 
-# 类别配置
-CLASS_NAMES = ["p"]  # 根据JSON文件中的label字段定义
-NUM_CLASSES = len(CLASS_NAMES)
+# 类别配置（已废弃 - 现在使用智能类别管理器）
+# 类别信息现在完全基于标注数据自动检测和管理
+# 请使用 class_manager 模块获取最新的类别信息
 
 # 训练配置
 TRAINING_CONFIG = {

@@ -14,11 +14,20 @@ import cv2
 from PIL import Image
 import pandas as pd
 
-from config import DATASETS_DIR, CLASS_NAMES
+from config import DATASETS_DIR
+from class_manager import ClassManager
 
 
 def visualize_dataset_distribution():
     """可视化数据集分布"""
+    # 获取类别名称
+    class_manager = ClassManager()
+    CLASS_NAMES = class_manager.get_class_names()
+    
+    if not CLASS_NAMES:
+        print("❌ 无法获取类别名称，请先设置类别配置")
+        return
+    
     splits = ['train', 'val', 'test']
     class_counts = {split: {cls: 0 for cls in CLASS_NAMES} for split in splits}
     total_images = {split: 0 for split in splits}
@@ -97,6 +106,14 @@ def visualize_dataset_distribution():
 def check_dataset_integrity():
     """检查数据集完整性"""
     print("检查数据集完整性...")
+    
+    # 获取类别名称
+    class_manager = ClassManager()
+    CLASS_NAMES = class_manager.get_class_names()
+    
+    if not CLASS_NAMES:
+        print("❌ 无法获取类别名称，请先设置类别配置")
+        return False
     
     issues = []
     splits = ['train', 'val', 'test']
@@ -182,6 +199,14 @@ def visualize_annotations(image_path: str, label_path: str = None, output_path: 
         label_path: 标签文件路径，如果为None则自动推断
         output_path: 输出路径
     """
+    # 获取类别名称
+    class_manager = ClassManager()
+    CLASS_NAMES = class_manager.get_class_names()
+    
+    if not CLASS_NAMES:
+        print("❌ 无法获取类别名称，请先设置类别配置")
+        return
+    
     image_path = Path(image_path)
     
     if label_path is None:

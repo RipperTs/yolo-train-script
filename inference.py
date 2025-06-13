@@ -14,9 +14,10 @@ from PIL import Image
 # 添加当前目录到Python路径
 sys.path.append(str(Path(__file__).parent))
 
-from config import INFERENCE_CONFIG, CLASS_NAMES, MODELS_DIR, get_default_device
+from config import INFERENCE_CONFIG, MODELS_DIR, get_default_device
 from config_manager import config_manager
 from device_manager import device_manager
+from class_manager import class_manager
 
 
 class YOLOv8Inference:
@@ -32,7 +33,7 @@ class YOLOv8Inference:
         """
         self.model = None
         self.model_path = model_path
-        self.class_names = CLASS_NAMES
+        self.class_names = self._load_class_names()
         self.device = device
         
         if model_path is None:
@@ -42,6 +43,35 @@ class YOLOv8Inference:
         self._setup_device()
         
         self.load_model()
+    
+    def _load_class_names(self) -> List[str]:
+        """
+        从类别管理器加载类别名称
+        
+        Returns:
+            类别名称列表
+        """
+        try:
+            # 优先从类别管理器获取最新的类别信息
+            class_names = class_manager.get_class_names()
+            
+            if class_names:
+                print(f"📋 从类别管理器加载类别: {class_names}")
+                return class_names
+            
+            # 备用方案：尝试从dataset.yaml加载
+            class_names = class_manager.load_classes_from_yaml()
+            if class_names:
+                print(f"📋 从dataset.yaml加载类别: {class_names}")
+                return class_names
+            
+            # 最后备用：返回通用类别名称
+            print("⚠️ 无法加载类别信息，使用通用类别名称")
+            return [f"class_{i}" for i in range(10)]  # 返回10个通用类别
+            
+        except Exception as e:
+            print(f"⚠️ 加载类别名称失败: {e}，使用通用类别名称")
+            return [f"class_{i}" for i in range(10)]
     
     def _setup_device(self):
         """设置推理设备"""
@@ -99,6 +129,10 @@ class YOLOv8Inference:
             )
         except Exception as e:
             raise Exception(f"加载模型失败: {e}")
+    
+    def reload_class_names(self):
+        """重新加载类别名称"""
+        self.class_names = self._load_class_names()
     
     def predict_image(self, image_path: str, save_result: bool = True) -> Dict:
         """

@@ -15,8 +15,9 @@ import numpy as np
 
 from config import (
     YOLO_POINT_DIR, DATASETS_DIR, IMAGES_DIR, LABELS_DIR,
-    TRAIN_RATIO, VAL_RATIO, TEST_RATIO, CLASS_NAMES, ensure_directories
+    TRAIN_RATIO, VAL_RATIO, TEST_RATIO, ensure_directories
 )
+from class_manager import class_manager
 
 
 class DataConverter:
@@ -24,68 +25,11 @@ class DataConverter:
 
     def __init__(self, source_dir=None):
         self.source_dir = Path(source_dir) if source_dir else YOLO_POINT_DIR
-        self.class_to_id = {name: idx for idx, name in enumerate(CLASS_NAMES)}
+        self.class_to_id = {}  # 将从类别管理器获取
         self.auto_detected_classes = set()
         ensure_directories()
 
-    def scan_all_classes(self) -> Set[str]:
-        """
-        扫描所有JSON文件，自动检测所有类别
-        
-        Returns:
-            包含所有发现类别的集合
-        """
-        all_classes = set()
-        
-        json_files = list(self.source_dir.glob("*.json"))
-        print(f"正在扫描 {len(json_files)} 个JSON文件以检测类别...")
-        
-        for json_file in json_files:
-            try:
-                with open(json_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                shapes = data.get('shapes', [])
-                for shape in shapes:
-                    label = shape.get('label', '').strip()
-                    if label:  # 只添加非空标签
-                        all_classes.add(label)
-                        
-            except Exception as e:
-                print(f"⚠️ 扫描文件 {json_file} 时出错: {e}")
-                continue
-        
-        return all_classes
 
-    def update_class_mapping(self, detected_classes: Set[str]):
-        """
-        更新类别映射，兼容新发现的类别
-        
-        Args:
-            detected_classes: 检测到的类别集合
-        """
-        self.auto_detected_classes = detected_classes
-        
-        # 如果检测到的类别与配置的类别不同，进行智能合并
-        config_classes = set(CLASS_NAMES)
-        
-        if detected_classes != config_classes:
-            print(f"📋 配置文件中的类别: {config_classes}")
-            print(f"🔍 检测到的类别: {detected_classes}")
-            
-            # 合并类别（优先使用检测到的类别）
-            all_classes = list(detected_classes)
-            all_classes.sort()  # 排序以确保一致性
-            
-            print(f"✅ 将使用检测到的类别: {all_classes}")
-            
-            # 更新类别映射
-            self.class_to_id = {name: idx for idx, name in enumerate(all_classes)}
-            
-            return all_classes
-        else:
-            print(f"✅ 类别检测完成，与配置一致: {config_classes}")
-            return CLASS_NAMES
 
     def check_source_directory(self):
         """检查源目录状态"""
@@ -105,17 +49,12 @@ class DataConverter:
                 "file_count": 0
             }
 
-        # 自动检测类别
-        detected_classes = self.scan_all_classes()
-        
         return {
             "status": "ready",
             "message": f"找到 {len(json_files)} 个JSON文件",
             "path": str(self.source_dir),
             "file_count": len(json_files),
-            "files": [f.name for f in json_files[:5]],
-            "detected_classes": list(detected_classes),
-            "class_count": len(detected_classes)
+            "files": [f.name for f in json_files[:5]]
         }
     
     def convert_json_to_yolo(self, json_file_path: Path) -> List[str]:
@@ -355,7 +294,7 @@ class DataConverter:
     
     def convert_all(self):
         """转换所有数据"""
-        print(f"开始转换数据，源目录: {self.source_dir}")
+        print(f"🚀 开始转换数据，源目录: {self.source_dir}")
 
         # 检查源目录状态
         status = self.check_source_directory()
@@ -371,14 +310,23 @@ class DataConverter:
         
         print(f"找到 {len(json_files)} 个JSON文件")
         
-        # 自动检测和更新类别映射
-        print("\n🔍 正在检测数据集中的类别...")
-        detected_classes = self.scan_all_classes()
-        final_classes = self.update_class_mapping(detected_classes)
+        # 使用类别管理器同步类别信息
+        print("\n🔍 使用智能类别管理器检测类别...")
+        class_manager.sync_with_annotation_data(self.source_dir)
         
-        print(f"\n📊 最终类别映射:")
+        # 获取类别映射
+        self.class_to_id = class_manager.export_class_mapping()
+        class_names = class_manager.get_class_names()
+        
+        if not class_names:
+            print("❌ 没有发现任何有效的类别")
+            return {"status": "no_classes", "message": "没有发现任何有效的类别"}
+        
+        print(f"\n📊 检测到的类别 ({len(class_names)} 个):")
         for class_name, class_id in self.class_to_id.items():
-            print(f"  {class_id}: {class_name}")
+            class_info = class_manager.get_class_info(class_name)
+            count = class_info.count if class_info else 0
+            print(f"  {class_id}: {class_name} ({count} 个标注)")
         
         # 分割数据集
         train_files, val_files, test_files = self.split_dataset(json_files)
@@ -396,13 +344,22 @@ class DataConverter:
         
         print("\n✅ 数据转换完成!")
         
-        # 生成数据集配置文件
-        self.generate_dataset_yaml(final_classes)
+        # 使用类别管理器生成数据集配置文件
+        class_manager.generate_dataset_yaml(DATASETS_DIR)
+        
+        # 显示转换统计
+        stats = class_manager.get_class_statistics()
+        print(f"\n📊 转换统计:")
+        print(f"  总类别数: {stats['total_classes']}")
+        print(f"  总标注数: {stats['total_annotations']}")
+        
+        return {"status": "success", "class_count": len(class_names), "classes": class_names}
     
     def generate_dataset_yaml(self, class_names=None):
         """生成YOLO数据集配置文件"""
         if class_names is None:
-            class_names = CLASS_NAMES
+            # 使用类别管理器获取类别名称
+            class_names = class_manager.get_class_names()
             
         yaml_content = f"""# YOLOv8 数据集配置文件
 # 自动生成于数据转换过程

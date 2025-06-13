@@ -1,23 +1,16 @@
-# YOLOv8 数据集配置文件
-# 自动生成于数据转换过程
-
-# 数据集路径 (相对于此文件的路径)
 path: /Users/wyf/PythonProject/yolo-train/datasets
 train: images/train
 val: images/val
 test: images/test
-
-# 类别数量
-nc: 9
-
-# 类别名称
+nc: 10
 names:
-  0: car
-  1: chair
-  2: cup
-  3: kite
-  4: laptop
-  5: person
-  6: potted plant
+  0: p
+  1: tv
+  2: potted plant
+  3: person
+  4: chair
+  5: laptop
+  6: cup
   7: remote
-  8: tv
+  8: kite
+  9: car

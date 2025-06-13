@@ -487,14 +487,22 @@ class GradioApp:
         """获取转换预览"""
         try:
             preview = dataset_directory_manager.get_conversion_preview()
-            # 如果预览成功，添加类别检测信息
+            # 如果预览成功，使用类别管理器添加类别检测信息
             if preview.get("status") == "ready":
-                from data_converter import DataConverter
-                converter = DataConverter(dataset_directory_manager.current_source_dir)
-                detected_classes = converter.scan_all_classes()
-                preview["detected_classes"] = list(detected_classes)
-                preview["class_count"] = len(detected_classes)
-                preview["class_mapping"] = {cls: idx for idx, cls in enumerate(sorted(detected_classes))}
+                from class_manager import class_manager
+                
+                # 临时同步类别信息以获取预览
+                class_manager.sync_with_annotation_data(dataset_directory_manager.current_source_dir)
+                
+                class_names = class_manager.get_class_names()
+                class_mapping = class_manager.export_class_mapping()
+                stats = class_manager.get_class_statistics()
+                
+                preview["detected_classes"] = class_names
+                preview["class_count"] = len(class_names)
+                preview["class_mapping"] = class_mapping
+                preview["class_statistics"] = stats
+                
             return preview
         except Exception as e:
             return {"error": f"获取预览失败: {e}"}
@@ -646,6 +654,8 @@ class GradioApp:
             )
 
             inference = YOLOv8Inference(absolute_model_path)
+            # 重新加载类别名称以确保使用最新的类别
+            inference.reload_class_names()
             result = inference.predict_image(image_path)
 
             # 可视化结果
@@ -671,6 +681,8 @@ class GradioApp:
             )
 
             inference = YOLOv8Inference(model_path)
+            # 重新加载类别名称以确保使用最新的类别
+            inference.reload_class_names()
             image_paths = [f.name for f in image_files]
             results = inference.predict_batch(image_paths)
 
