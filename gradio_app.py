@@ -420,13 +420,6 @@ class GradioApp:
                 "directory": directory_path
             }
 
-    def _get_conversion_preview(self):
-        """获取转换预览"""
-        try:
-            return dataset_directory_manager.get_conversion_preview()
-        except Exception as e:
-            return {"error": f"获取预览失败: {e}"}
-
     def _convert_data(self):
         """转换数据"""
         try:
@@ -493,7 +486,16 @@ class GradioApp:
     def _get_conversion_preview(self):
         """获取转换预览"""
         try:
-            return dataset_directory_manager.get_conversion_preview()
+            preview = dataset_directory_manager.get_conversion_preview()
+            # 如果预览成功，添加类别检测信息
+            if preview.get("status") == "ready":
+                from data_converter import DataConverter
+                converter = DataConverter(dataset_directory_manager.current_source_dir)
+                detected_classes = converter.scan_all_classes()
+                preview["detected_classes"] = list(detected_classes)
+                preview["class_count"] = len(detected_classes)
+                preview["class_mapping"] = {cls: idx for idx, cls in enumerate(sorted(detected_classes))}
+            return preview
         except Exception as e:
             return {"error": f"获取预览失败: {e}"}
 

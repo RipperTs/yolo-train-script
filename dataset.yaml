@@ -8,8 +8,16 @@ val: images/val
 test: images/test
 
 # 类别数量
-nc: 1
+nc: 9
 
 # 类别名称
 names:
-  0: p
+  0: car
+  1: chair
+  2: cup
+  3: kite
+  4: laptop
+  5: person
+  6: potted plant
+  7: remote
+  8: tv
