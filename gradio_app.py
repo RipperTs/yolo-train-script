@@ -369,6 +369,27 @@ class GradioApp:
                 
                 # 导出格式和按钮
                 model_format = gr.Dropdown(["onnx", "torchscript", "tflite"], value="onnx", label="导出格式")
+                
+                # YAML配置文件模板选择（仅在导出ONNX时显示）
+                yaml_template = gr.Dropdown(
+                    choices=[
+                        ("目标检测 (RT-DETR)", "rtdetr"),
+                        ("人脸及关键点检测 (YOLOv6-Face)", "yolov6_face"),
+                        ("检测+分类级联 (YOLOv5+ResNet)", "yolov5_cls"),
+                        ("标准YOLOV8检测", "yolo_det")
+                    ],
+                    value="yolo_det",
+                    label="YAML配置模板 (仅ONNX格式)",
+                    info="选择适合你模型的配置模板"
+                )
+                
+                # 模型参数配置
+                with gr.Accordion("模型参数配置", open=False):
+                    input_width = gr.Slider(128, 1280, value=640, step=32, label="输入宽度")
+                    input_height = gr.Slider(128, 1280, value=640, step=32, label="输入高度")
+                    confidence_threshold = gr.Slider(0.1, 1.0, value=0.45, step=0.05, label="置信度阈值")
+                    nms_threshold = gr.Slider(0.1, 1.0, value=0.45, step=0.05, label="NMS阈值")
+                
                 export_model_btn = gr.Button("📤 导出模型", variant="primary")
                 
                 gr.Markdown("### 系统工具")
@@ -393,7 +414,15 @@ class GradioApp:
         refresh_export_models_btn.click(self._refresh_export_models, outputs=export_model_dropdown)
         export_model_btn.click(
             self._export_model,
-            inputs=[export_model_dropdown, model_format],
+            inputs=[
+                export_model_dropdown, 
+                model_format, 
+                yaml_template, 
+                input_width, 
+                input_height, 
+                confidence_threshold, 
+                nms_threshold
+            ],
             outputs=tools_output
         )
         
@@ -856,7 +885,7 @@ class GradioApp:
         # 在新版本的Gradio中，直接返回新的选择列表
         return gr.Dropdown(choices=models, value=models[0] if models else None)
 
-    def _export_model(self, model_path, model_format):
+    def _export_model(self, model_path, model_format, yaml_template, input_width, input_height, confidence_threshold, nms_threshold):
         """导出模型"""
         if not model_path:
             return "❌ 请先选择要导出的模型"
@@ -875,6 +904,27 @@ class GradioApp:
             result_msg += f"📁 源模型: {model_path}\n"
             result_msg += f"🎯 导出格式: {model_format}\n"
             result_msg += f"💾 导出路径: {export_path}\n"
+            
+            # 如果是ONNX格式，生成YAML配置文件
+            if model_format.lower() == "onnx":
+                try:
+                    print(f"生成YAML配置文件，模板类型: {yaml_template}")
+                    yaml_path = model_manager.generate_yaml_config(
+                        export_path, 
+                        yaml_template,
+                        int(input_width), 
+                        int(input_height),
+                        confidence_threshold, 
+                        nms_threshold
+                    )
+                    result_msg += f"📄 YAML配置: {yaml_path}\n"
+                    result_msg += f"🎨 配置模板: {yaml_template}\n"
+                    result_msg += f"📐 输入尺寸: {int(input_width)}x{int(input_height)}\n"
+                    result_msg += f"🎯 置信度阈值: {confidence_threshold}\n"
+                    result_msg += f"🔗 NMS阈值: {nms_threshold}\n"
+                except Exception as yaml_error:
+                    result_msg += f"⚠️ YAML配置文件生成失败: {yaml_error}\n"
+            
             result_msg += f"📊 导出时间: {time.strftime('%Y-%m-%d %H:%M:%S')}"
             
             return result_msg

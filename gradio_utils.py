@@ -373,6 +373,139 @@ class ModelManager:
             print(f"❌ {error_msg}")
             raise Exception(error_msg)
 
+    def generate_yaml_config(self, model_path: str, template_type: str, 
+                           input_width: int = 640, input_height: int = 640,
+                           confidence_threshold: float = 0.45, nms_threshold: float = 0.45) -> str:
+        """
+        生成X-AnyLabeling的YAML配置文件
+        
+        Args:
+            model_path: ONNX模型路径
+            template_type: 模板类型 (rtdetr, yolov6_face, yolov5_cls, yolo_det)
+            input_width: 输入宽度
+            input_height: 输入高度
+            confidence_threshold: 置信度阈值
+            nms_threshold: NMS阈值
+            
+        Returns:
+            生成的YAML配置文件路径
+        """
+        try:
+            from class_manager import class_manager
+            import yaml
+            from datetime import datetime
+            
+            model_path = Path(model_path)
+            if not model_path.exists():
+                raise FileNotFoundError(f"模型文件不存在: {model_path}")
+            
+            # 获取类别信息
+            class_names = class_manager.get_class_names()
+            if not class_names:
+                # 如果没有类别信息，使用默认的COCO类别
+                class_names = [
+                    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
+                    "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench"
+                ]
+                print("⚠️ 未找到类别信息，使用默认COCO类别")
+            
+            # 生成配置内容
+            config = self._generate_config_by_template(
+                template_type, model_path, class_names, 
+                input_width, input_height, confidence_threshold, nms_threshold
+            )
+            
+            # 生成配置文件路径
+            yaml_path = model_path.with_suffix('.yaml')
+            
+            # 保存YAML文件
+            with open(yaml_path, 'w', encoding='utf-8') as f:
+                yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            
+            print(f"✅ YAML配置文件已生成: {yaml_path}")
+            return str(yaml_path)
+            
+        except Exception as e:
+            error_msg = f"生成YAML配置文件时出错: {e}"
+            print(f"❌ {error_msg}")
+            raise Exception(error_msg)
+
+    def _generate_config_by_template(self, template_type: str, model_path: Path, 
+                                   class_names: list, input_width: int, input_height: int,
+                                   confidence_threshold: float, nms_threshold: float) -> dict:
+        """根据模板类型生成配置"""
+        from datetime import datetime
+        
+        model_name = model_path.stem
+        timestamp = datetime.now().strftime("%Y%m%d")
+        
+        if template_type == "rtdetr":
+            return {
+                "type": "rtdetr",
+                "name": f"{model_name}-r{timestamp}",
+                "display_name": f"RT-DETR ({model_name})",
+                "model_path": str(model_path.absolute()),
+                "input_width": input_width,
+                "input_height": input_height,
+                "score_threshold": confidence_threshold,
+                "classes": class_names
+            }
+        
+        elif template_type == "yolov6_face":
+            return {
+                "type": "yolov6_face",
+                "name": f"{model_name}-r{timestamp}",
+                "display_name": f"YOLOv6-Face ({model_name})",
+                "model_path": str(model_path.absolute()),
+                "input_width": input_width,
+                "input_height": input_height,
+                "stride": 64,
+                "nms_threshold": nms_threshold,
+                "confidence_threshold": confidence_threshold,
+                "classes": class_names,
+                "five_key_points_classes": [
+                    "left_eye", "right_eye", "nose_tip", "left_mouth_corner", "right_mouth_corner"
+                ]
+            }
+        
+        elif template_type == "yolov5_cls":
+            # 这是检测+分类级联模板，需要两个模型路径
+            return {
+                "type": "yolov5_cls",
+                "name": f"{model_name}-r{timestamp}",
+                "display_name": f"YOLOv5-Cls ({model_name})",
+                "det_model_path": str(model_path.absolute()),
+                "cls_model_path": "path/to/classification/model.onnx",  # 需要用户手动修改
+                "det_input_width": input_width,
+                "det_input_height": input_height,
+                "cls_input_width": 224,
+                "cls_input_height": 224,
+                "cls_score_threshold": 0.5,
+                "stride": 32,
+                "nms_threshold": nms_threshold,
+                "confidence_threshold": confidence_threshold,
+                "det_classes": class_names,
+                "cls_classes": {
+                    0: "class_0",
+                    1: "class_1",
+                    2: "class_2"
+                }
+            }
+        
+        else:  # yolo_det 标准YOLO检测
+            return {
+                "type": "yolov8",
+                "name": f"{model_name}-r{timestamp}",
+                "display_name": f"yoloV8-{model_name}",
+                "model_path": str(model_path.absolute()),
+                "input_width": input_width,
+                "input_height": input_height,
+                "stride": 32,
+                "nms_threshold": nms_threshold,
+                "confidence_threshold": confidence_threshold,
+                "classes": class_names
+            }
+
 
 # 全局实例
 log_monitor = LogMonitor()
