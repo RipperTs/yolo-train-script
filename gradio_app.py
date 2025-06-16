@@ -363,8 +363,13 @@ class GradioApp:
                 calc_anchors_btn = gr.Button("⚓ 计算锚框")
                 
                 gr.Markdown("### 模型工具")
-                export_model_btn = gr.Button("📤 导出模型")
+                # 模型选择下拉框
+                export_model_dropdown = gr.Dropdown(label="选择要导出的模型", choices=[], interactive=True)
+                refresh_export_models_btn = gr.Button("🔄 刷新模型列表", size="sm")
+                
+                # 导出格式和按钮
                 model_format = gr.Dropdown(["onnx", "torchscript", "tflite"], value="onnx", label="导出格式")
+                export_model_btn = gr.Button("📤 导出模型", variant="primary")
                 
                 gr.Markdown("### 系统工具")
                 check_env_btn = gr.Button("🔧 检查环境")
@@ -383,6 +388,17 @@ class GradioApp:
         calc_anchors_btn.click(self._calculate_anchors, outputs=tools_output)
         check_env_btn.click(self._check_environment, outputs=tools_output)
         refresh_system_btn.click(self._get_system_info, outputs=system_info)
+        
+        # 模型导出相关事件
+        refresh_export_models_btn.click(self._refresh_export_models, outputs=export_model_dropdown)
+        export_model_btn.click(
+            self._export_model,
+            inputs=[export_model_dropdown, model_format],
+            outputs=tools_output
+        )
+        
+        # 初始化模型列表
+        refresh_export_models_btn.click(self._refresh_export_models, outputs=export_model_dropdown)
         
         # 初始化系统信息
         # refresh_system_btn.click(self._get_system_info, outputs=system_info)
@@ -833,6 +849,41 @@ class GradioApp:
             }
         except Exception as e:
             return {"错误": f"获取系统信息失败: {e}"}
+
+    def _refresh_export_models(self):
+        """刷新模型列表"""
+        models = model_manager.get_available_models()
+        # 在新版本的Gradio中，直接返回新的选择列表
+        return gr.Dropdown(choices=models, value=models[0] if models else None)
+
+    def _export_model(self, model_path, model_format):
+        """导出模型"""
+        if not model_path:
+            return "❌ 请先选择要导出的模型"
+            
+        try:
+            # 转换相对路径为绝对路径
+            absolute_model_path = model_manager.get_absolute_path(model_path)
+            
+            print(f"开始导出模型: {model_path}")
+            print(f"导出格式: {model_format}")
+            
+            # 导出模型
+            export_path = model_manager.export_model(absolute_model_path, model_format)
+            
+            result_msg = f"✅ 模型导出完成！\n"
+            result_msg += f"📁 源模型: {model_path}\n"
+            result_msg += f"🎯 导出格式: {model_format}\n"
+            result_msg += f"💾 导出路径: {export_path}\n"
+            result_msg += f"📊 导出时间: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            
+            return result_msg
+            
+        except Exception as e:
+            error_msg = f"❌ 导出模型失败: {e}\n"
+            error_msg += f"📁 尝试导出的模型: {model_path}\n"
+            error_msg += f"🎯 导出格式: {model_format}"
+            return error_msg
 
 
 # 创建应用实例

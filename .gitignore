@@ -40,3 +40,4 @@ logs/
 models/
 yolov8n.pt
 YOLOv8
+.cursor

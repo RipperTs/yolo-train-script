@@ -335,6 +335,44 @@ class ModelManager:
         except Exception as e:
             return {"error": f"获取模型信息失败: {e}"}
 
+    def export_model(self, model_path: str, format: str = "onnx") -> str:
+        """
+        导出模型为其他格式
+        
+        Args:
+            model_path: 模型路径
+            format: 导出格式 (onnx, torchscript, tflite等)
+            
+        Returns:
+            导出的模型路径
+        """
+        try:
+            from ultralytics import YOLO
+            
+            model_path = Path(model_path)
+            if not model_path.exists():
+                raise FileNotFoundError(f"模型文件不存在: {model_path}")
+            
+            print(f"🔄 正在导出模型为 {format} 格式...")
+            print(f"📁 源模型路径: {model_path}")
+            
+            # 加载模型
+            model = YOLO(str(model_path))
+            
+            # 导出模型
+            export_path = model.export(format=format)
+            
+            print(f"✅ 模型已成功导出到: {export_path}")
+            
+            return str(export_path)
+            
+        except ImportError:
+            raise ImportError("未安装ultralytics库，请运行: pip install ultralytics")
+        except Exception as e:
+            error_msg = f"导出模型时出错: {e}"
+            print(f"❌ {error_msg}")
+            raise Exception(error_msg)
+
 
 # 全局实例
 log_monitor = LogMonitor()
